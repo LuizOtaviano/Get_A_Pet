@@ -3,6 +3,7 @@ const Pet = require('../models/Pet.js')
 // helpers
 const getToken = require('../helpers/get-token.js')
 const getUserByToken = require('../helpers/get-user-by-token.js')
+const ObjectId = require('mongoose').Types.ObjectId
 
 module.exports = class PetsControllers {
 
@@ -98,6 +99,148 @@ module.exports = class PetsControllers {
     const pets = await Pet.find({ 'user._id': user._id }).sort('-createdAt')
 
     res.status(200).json({ user: user.name, pets })
+
+  }
+
+  static async getAllUserAdoptions(req, res) {
+
+    // Get currente user
+    const token = getToken(req)
+    const user = getUserByToken(token)
+
+    const pets = await Pet.find({ 'adopeter._id': user._id }).sort('-createAt')
+
+    res.status(200).json({ user: user.name, pets })
+
+  }
+
+  static async getPetById(req, res) {
+    const id = req.params.id
+
+    if(!ObjectId.isValid(id)) {
+      res.status(422).json({ message: 'O id do pet não e valido' })
+      return
+    }
+
+    const pet = await Pet.find({_id: id}).sort("-createAt")
+
+    if(!pet) {
+      res.status(404).json({ message: 'Pet não encontrado' })
+      return
+    }
+
+    res.status(200).json({ pet })
+  }
+
+  static async removePetById(req, res) {
+
+    const id = req.params.id
+
+    if(!ObjectId.isValid(id)) {
+      res.status(422).json({ message: 'O id do pet não valido' })
+      return
+    }
+
+    // check if pet exists
+    const pet = await Pet.findOne({ _id: id })
+
+    if(!pet) {
+      res.status(404).json({ message: 'O pet não existe!' })
+      return
+    }
+
+    // check if logged in user registered the pet
+    const token = getToken(req)
+    const user = await getUserByToken(token)
+
+    if(pet.user._id.toString() !== user._id.toString()) {
+      res.status(422).json({ message: "Houve um problema em processar sua solicitação tente novamente" })
+      return
+    }
+
+    // reomove pet
+    try {
+      await Pet.findByIdAndDelete(id)
+      res.status(200).json({ message: "Pet removido com sucesso" })
+    } catch(error) {
+      res.status(500).json({ message: error })
+    }
+  }
+
+  static async updatePet(req, res) {
+    const id = req.params.id
+    const { name, age, weight, color, avaliable } = req.body
+    const images = req.files
+
+    const updateData = {}
+
+    // validations
+    if (!ObjectId.isValid(id)) {
+      res.status(404).json({ message: "O id do pet não e encontrado!" })
+    }
+
+    // check if pet exits
+    const pet = await Pet.findOne({ _id: id })
+
+    if (!pet) {
+      res.status(404).json({ message: "Pet não encontrado!" })
+    }
+
+    // check if logged in user registered the pet
+    const token = getToken(req)
+    const user = await getUserByToken(token)
+
+    if (pet.user._id.toString() !== user._id.toString()) {
+      res
+        .status(422)
+        .json({
+          message:
+            "Houve um problema em processar sua solicitação tente novamente",
+        })
+      return
+    }
+
+    if (!name) {
+      res.status(422).json({ message: "O campo nome não pode estar vazio!" })
+      return
+    }
+
+    updateData.name = name
+
+    if (!age) {
+      res.status(422).json({ message: "O campo idade não pode esetar vazio!" })
+      return
+    }
+
+    updateData.age = age
+
+    if (!weight) {
+      res.status(422).json({ message: "O campo peso não pode estar vazio!" })
+      return
+    }
+
+    updateData.age = weight
+
+    if (!color) {
+      res.status(422).json({ message: "O campo cor não pode estar vazio!" })
+      return
+    }
+
+    updateData.color = color
+
+    if (images.length === 0) {
+      res.status(422).json({ message: "A imagem e obrigatoria!" })
+      return
+    } else {
+      updateData.images = []
+      images.map(image => {
+        updateData.images.push(image.filename)
+      })
+    }
+
+    await Pet.findByIdAndUpdate(id, updateData)
+
+    res.status(200).json({ message: 'Pet atualizado com sucesso' })
 
   }
 
